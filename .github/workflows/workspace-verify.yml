@@ -49,6 +49,9 @@ jobs:
       - run: pnpm install --frozen-lockfile
         env:
           PUPPETEER_SKIP_DOWNLOAD: 'true'
+      # Compiling locale catalogs is skipped by postinstall in CI; typecheck and
+      # tests import the generated messages modules.
+      - run: pnpm intl:build
       - run: pnpm typecheck
       - run: pnpm lint
       - run: pnpm test
