@@ -87,8 +87,30 @@ jobs:
           EXPO_OWNER: ${{ vars.EXPO_OWNER }}
           EAS_PROJECT_ID: ${{ vars.EAS_PROJECT_ID }}
         run: |
-          set -euo pipefail
-          eas build --profile "${{ steps.profile.outputs.profile }}" --platform android --non-interactive --wait --json > eas-build.json
+          set -uo pipefail
+          status=0
+          eas build --profile "${{ steps.profile.outputs.profile }}" --platform android --non-interactive --wait --json > eas-build.json || status=$?
+          if [[ "${status}" -ne 0 ]]; then
+            node <<'NODE'
+          const fs = require('node:fs')
+          let builds = []
+          try {
+            builds = JSON.parse(fs.readFileSync('eas-build.json', 'utf8'))
+          } catch {}
+          const build = Array.isArray(builds) ? builds[0] : builds
+          if (!build) {
+            console.error('EAS 未返回构建记录，请查看上方日志。')
+            process.exit(0)
+          }
+          console.error(`构建编号：${build.id ?? '未返回'}`)
+          console.error(`构建状态：${build.status ?? '未返回'}`)
+          console.error(`构建页面：${build.buildDetailsPageUrl ?? '未返回'}`)
+          console.error(`错误代码：${build.error?.errorCode ?? '未返回'}`)
+          console.error(`错误信息：${build.error?.message ?? '未返回'}`)
+          if (build.error?.docsUrl) console.error(`错误文档：${build.error.docsUrl}`)
+          NODE
+            exit "${status}"
+          fi
           node <<'NODE'
           const fs = require('node:fs')
           const builds = JSON.parse(fs.readFileSync('eas-build.json', 'utf8'))
