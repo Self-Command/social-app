@@ -21,6 +21,15 @@
         "EXPO_PUBLIC_ENV": "production"
       }
     },
+    "development-android": {
+      "extends": "development",
+      "android": {
+        "buildType": "apk"
+      },
+      "env": {
+        "DISABLE_UPDATES": "1"
+      }
+    },
     "development-simulator": {
       "extends": "development",
       "env": {
