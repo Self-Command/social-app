@@ -55,7 +55,7 @@ module.exports = function (_config) {
       name: 'Bluesky',
       slug: 'bluesky',
       scheme: 'bluesky',
-      owner: 'blueskysocial',
+      owner: process.env.EXPO_OWNER || 'blueskysocial',
       runtimeVersion: {
         policy: 'appVersion',
       },
@@ -598,7 +598,9 @@ module.exports = function (_config) {
               },
             },
           },
-          projectId: '55bd077a-d905-4184-9c7f-94789ba0f302',
+          projectId:
+            process.env.EAS_PROJECT_ID ||
+            '55bd077a-d905-4184-9c7f-94789ba0f302',
         },
       },
       experiments: {

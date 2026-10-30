@@ -1,0 +1,131 @@
+name: Workspace EAS Android
+
+on:
+  workflow_dispatch:
+    inputs:
+      profile:
+        description: EAS build profile
+        type: choice
+        options:
+          - development
+          - e2e
+        default: development
+
+concurrency:
+  group: workspace-eas-android-${{ inputs.profile }}-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: EAS Android ${{ inputs.profile }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          version: 11.28.5
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24.22.1
+          cache: pnpm
+      - name: Check Expo project configuration
+        env:
+          EXPO_OWNER: ${{ vars.EXPO_OWNER }}
+          EAS_PROJECT_ID: ${{ vars.EAS_PROJECT_ID }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${EXPO_OWNER}" || -z "${EAS_PROJECT_ID}" ]]; then
+            echo "::error::仓库变量 EXPO_OWNER 或 EAS_PROJECT_ID 未配置，无法定位企业 Expo 项目。"
+            exit 1
+          fi
+          echo "Expo 项目：${EXPO_OWNER} / ${EAS_PROJECT_ID}"
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+        env:
+          PUPPETEER_SKIP_DOWNLOAD: 'true'
+      - name: Setup Expo and EAS
+        uses: expo/expo-github-action@eab7a230208c952974db8c3245cfd78402c7b385 # 9.0.0
+        with:
+          eas-version: '25.3.0'
+          packager: 'pnpm --dangerously-allow-all-builds'
+          token: ${{ secrets.EXPO_TOKEN }}
+      - name: Verify Expo account
+        run: eas whoami
+      - name: Submit and wait for build
+        id: build
+        env:
+          EXPO_OWNER: ${{ vars.EXPO_OWNER }}
+          EAS_PROJECT_ID: ${{ vars.EAS_PROJECT_ID }}
+        run: |
+          set -euo pipefail
+          eas build --profile "${{ inputs.profile }}" --platform android --non-interactive --wait --json > eas-build.json
+          node <<'NODE'
+          const fs = require('node:fs')
+          const builds = JSON.parse(fs.readFileSync('eas-build.json', 'utf8'))
+          const build = Array.isArray(builds) ? builds[0] : builds
+          if (!build) {
+            console.error('EAS 未返回构建记录')
+            process.exit(1)
+          }
+          const url = build.artifacts?.buildUrl ?? build.artifacts?.applicationArchiveUrl
+          if (!url) {
+            console.error('EAS 构建记录缺少 Android 产物地址')
+            process.exit(1)
+          }
+          const lines = [
+            `url=${url}`,
+            `page=${build.buildDetailsPageUrl ?? ''}`,
+            `id=${build.id ?? ''}`,
+          ]
+          fs.appendFileSync(process.env.GITHUB_OUTPUT, `${lines.join('\n')}\n`)
+          fs.appendFileSync(
+            process.env.GITHUB_STEP_SUMMARY,
+            [
+              '### EAS Android 构建',
+              '',
+              `- 配置：\`${{ inputs.profile }}\``,
+              `- 提交：\`${process.env.GITHUB_SHA}\``,
+              `- 构建页面：${build.buildDetailsPageUrl ?? '（未返回）'}`,
+              '',
+            ].join('\n'),
+          )
+          NODE
+      - name: Download Android artifact
+        run: |
+          set -euo pipefail
+          curl -fL --retry 3 --retry-delay 5 -o app.apk "${{ steps.build.outputs.url }}"
+          ls -lh app.apk
+      - name: Verify package name
+        run: |
+          set -euo pipefail
+          SDK="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
+          if [[ -z "${SDK}" || ! -d "${SDK}/build-tools" ]]; then
+            echo "::error::运行器缺少 Android SDK build-tools，无法校验包名。"
+            exit 1
+          fi
+          AAPT2="$(find "${SDK}/build-tools" -mindepth 2 -maxdepth 2 -name aapt2 | sort -V | tail -1)"
+          if [[ -z "${AAPT2}" ]]; then
+            echo "::error::未找到 aapt2，无法校验包名。"
+            exit 1
+          fi
+          BADGING="$("${AAPT2}" dump badging app.apk | head -1)"
+          echo "${BADGING}"
+          if [[ "${BADGING}" != *"package: name='xyz.blueskyweb.app'"* ]]; then
+            echo "::error::构建产物包名不是 xyz.blueskyweb.app，已拒绝上传。"
+            exit 1
+          fi
+      - name: Compute artifact name
+        id: meta
+        run: echo "name=app-android-${{ inputs.profile }}-${GITHUB_SHA::12}" >> "${GITHUB_OUTPUT}"
+      - name: Upload Android artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: ${{ steps.meta.outputs.name }}
+          path: app.apk
+          if-no-files-found: error
+          retention-days: 14
