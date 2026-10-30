@@ -53,7 +53,8 @@ module.exports = function (_config) {
     expo: {
       version: VERSION,
       name: 'Bluesky',
-      slug: 'bluesky',
+      // 与 EAS 企业项目（@hualuos-team/community）的 slug 保持一致，否则 eas build 拒绝启动。
+      slug: 'community',
       scheme: 'bluesky',
       // EAS 云端不会继承 GitHub 仓库变量，默认值必须指向企业 Expo 项目。
       owner: process.env.EXPO_OWNER || 'hualuos-team',
