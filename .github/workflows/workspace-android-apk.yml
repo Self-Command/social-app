@@ -68,6 +68,9 @@ jobs:
         run: pnpm install --frozen-lockfile
         env:
           PUPPETEER_SKIP_DOWNLOAD: 'true'
+      # 本地化 messages.ts 不入库，CI 环境下 postinstall 的 intl:compile-if-needed 会跳过编译，必须显式生成。
+      - name: Compile localization messages
+        run: pnpm intl:compile
       - name: Install Android SDK components
         run: |
           set -euo pipefail
