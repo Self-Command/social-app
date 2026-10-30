@@ -108,7 +108,16 @@ jobs:
           console.error(`错误代码：${build.error?.errorCode ?? '未返回'}`)
           console.error(`错误信息：${build.error?.message ?? '未返回'}`)
           if (build.error?.docsUrl) console.error(`错误文档：${build.error.docsUrl}`)
+          const urls = Array.isArray(build.logFiles) ? build.logFiles : []
+          if (urls.length > 0) fs.writeFileSync('eas-log-urls.txt', `${urls.join('\n')}\n`)
           NODE
+            if [[ -f eas-log-urls.txt ]]; then
+              while IFS= read -r url; do
+                [[ -z "${url}" ]] && continue
+                echo "---- EAS 构建日志（末 400 行）----"
+                curl -fsSL "${url}" | tail -n 400 || true
+              done < eas-log-urls.txt
+            fi
             exit "${status}"
           fi
           node <<'NODE'
