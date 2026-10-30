@@ -110,18 +110,23 @@ jobs:
           if (build.error?.docsUrl) console.error(`错误文档：${build.error.docsUrl}`)
           const urls = Array.isArray(build.logFiles) ? build.logFiles : []
           if (urls.length > 0) fs.writeFileSync('eas-log-urls.txt', `${urls.join('\n')}\n`)
+          for (const url of urls) console.error(`日志地址：${url.split('?')[0]}`)
           NODE
+            decompress() {
+              if gzip -t "$1" 2>/dev/null; then gzip -dc "$1"
+              elif command -v zstd >/dev/null 2>&1 && zstd -t "$1" >/dev/null 2>&1; then zstd -dc "$1"
+              elif unzip -t "$1" >/dev/null 2>&1; then unzip -p "$1"
+              else cat "$1"
+              fi
+            }
             if [[ -f eas-log-urls.txt ]]; then
               while IFS= read -r url; do
                 [[ -z "${url}" ]] && continue
                 echo "---- EAS 构建日志（末 400 行）----"
                 log_file="$(mktemp)"
                 if curl -fsSL "${url}" -o "${log_file}"; then
-                  if gzip -t "${log_file}" 2>/dev/null; then
-                    gzip -dc "${log_file}" | tail -n 400 || true
-                  else
-                    tail -n 400 "${log_file}" || true
-                  fi
+                  echo "日志格式：$(file -b "${log_file}")"
+                  decompress "${log_file}" | tail -n 400 || true
                 fi
                 rm -f "${log_file}"
               done < eas-log-urls.txt
