@@ -55,7 +55,8 @@ module.exports = function (_config) {
       name: 'Bluesky',
       slug: 'bluesky',
       scheme: 'bluesky',
-      owner: process.env.EXPO_OWNER || 'blueskysocial',
+      // EAS 云端不会继承 GitHub 仓库变量，默认值必须指向企业 Expo 项目。
+      owner: process.env.EXPO_OWNER || 'hualuos-team',
       runtimeVersion: {
         policy: 'appVersion',
       },
@@ -600,7 +601,7 @@ module.exports = function (_config) {
           },
           projectId:
             process.env.EAS_PROJECT_ID ||
-            '55bd077a-d905-4184-9c7f-94789ba0f302',
+            'd985fa45-b0d0-497e-8542-5deeb8c39672',
         },
       },
       experiments: {

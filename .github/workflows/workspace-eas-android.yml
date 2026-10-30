@@ -10,9 +10,14 @@ on:
           - development
           - e2e
         default: development
+  # workflow_dispatch 只识别默认分支上的工作流；企业分支通过标签推送触发，
+  # 避免把企业流程写进上游 main。标签格式：eas-android-<profile>-<时间戳>。
+  push:
+    tags:
+      - 'eas-android-*'
 
 concurrency:
-  group: workspace-eas-android-${{ inputs.profile }}-${{ github.ref }}
+  group: workspace-eas-android-${{ github.ref }}
   cancel-in-progress: false
 
 permissions:
@@ -20,12 +25,32 @@ permissions:
 
 jobs:
   build:
-    name: EAS Android ${{ inputs.profile }}
+    name: EAS Android
     runs-on: ubuntu-24.04
     timeout-minutes: 120
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Resolve build profile
+        id: profile
+        env:
+          INPUT_PROFILE: ${{ inputs.profile }}
+        run: |
+          set -euo pipefail
+          profile="${INPUT_PROFILE}"
+          if [[ -z "${profile}" ]]; then
+            case "${GITHUB_REF_NAME}" in
+              eas-android-e2e-*) profile=e2e ;;
+              eas-android-*) profile=development ;;
+              *) echo "::error::无法从 ${GITHUB_REF_NAME} 推断构建配置。"; exit 1 ;;
+            esac
+          fi
+          case "${profile}" in
+            development|e2e) ;;
+            *) echo "::error::不支持的构建配置：${profile}"; exit 1 ;;
+          esac
+          echo "profile=${profile}" >> "${GITHUB_OUTPUT}"
+          echo "构建配置：${profile}"
       - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
         with:
           version: 11.28.5
@@ -63,7 +88,7 @@ jobs:
           EAS_PROJECT_ID: ${{ vars.EAS_PROJECT_ID }}
         run: |
           set -euo pipefail
-          eas build --profile "${{ inputs.profile }}" --platform android --non-interactive --wait --json > eas-build.json
+          eas build --profile "${{ steps.profile.outputs.profile }}" --platform android --non-interactive --wait --json > eas-build.json
           node <<'NODE'
           const fs = require('node:fs')
           const builds = JSON.parse(fs.readFileSync('eas-build.json', 'utf8'))
@@ -88,7 +113,7 @@ jobs:
             [
               '### EAS Android 构建',
               '',
-              `- 配置：\`${{ inputs.profile }}\``,
+              `- 配置：\`${{ steps.profile.outputs.profile }}\``,
               `- 提交：\`${process.env.GITHUB_SHA}\``,
               `- 构建页面：${build.buildDetailsPageUrl ?? '（未返回）'}`,
               '',
@@ -121,7 +146,7 @@ jobs:
           fi
       - name: Compute artifact name
         id: meta
-        run: echo "name=app-android-${{ inputs.profile }}-${GITHUB_SHA::12}" >> "${GITHUB_OUTPUT}"
+        run: echo "name=app-android-${{ steps.profile.outputs.profile }}-${GITHUB_SHA::12}" >> "${GITHUB_OUTPUT}"
       - name: Upload Android artifact
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
