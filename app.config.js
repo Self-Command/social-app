@@ -406,7 +406,8 @@ module.exports = function (_config) {
               compileSdkVersion: 37,
               targetSdkVersion: 36,
               buildToolsVersion: '37.0.0',
-              buildReactNativeFromSource: true,
+              // Hermes 仓库已从 facebook/hermes 迁移到 meta/hermes，RN 0.88 解压时
+              // 只剥离 facebook-hermes- 前缀，导致 CMake 找不到 CMakeLists.txt。
               enableMinifyInReleaseBuilds: true,
             },
           },
