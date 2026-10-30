@@ -49,8 +49,16 @@ jobs:
             development|e2e) ;;
             *) echo "::error::不支持的构建配置：${profile}"; exit 1 ;;
           esac
+          # development 默认开启 OTA 更新与代码签名，会拒绝本地 Metro 的未签名清单；
+          # 企业开发 APK 使用关闭更新的 development-android 配置。
+          if [[ "${profile}" == "development" ]]; then
+            build_profile=development-android
+          else
+            build_profile="${profile}"
+          fi
           echo "profile=${profile}" >> "${GITHUB_OUTPUT}"
-          echo "构建配置：${profile}"
+          echo "build_profile=${build_profile}" >> "${GITHUB_OUTPUT}"
+          echo "构建配置：${profile}（EAS profile：${build_profile}）"
       - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
         with:
           version: 11.28.5
@@ -87,8 +95,84 @@ jobs:
           EXPO_OWNER: ${{ vars.EXPO_OWNER }}
           EAS_PROJECT_ID: ${{ vars.EAS_PROJECT_ID }}
         run: |
-          set -euo pipefail
-          eas build --profile "${{ steps.profile.outputs.profile }}" --platform android --non-interactive --wait --json > eas-build.json
+          set -uo pipefail
+          status=0
+          eas build --profile "${{ steps.profile.outputs.build_profile }}" --platform android --non-interactive --wait --json > eas-build.json || status=$?
+          if [[ "${status}" -ne 0 ]]; then
+            node <<'NODE'
+          const fs = require('node:fs')
+          let builds = []
+          try {
+            builds = JSON.parse(fs.readFileSync('eas-build.json', 'utf8'))
+          } catch {}
+          const build = Array.isArray(builds) ? builds[0] : builds
+          if (!build) {
+            console.error('EAS 未返回构建记录，请查看上方日志。')
+            process.exit(0)
+          }
+          console.error(`构建编号：${build.id ?? '未返回'}`)
+          console.error(`构建状态：${build.status ?? '未返回'}`)
+          console.error(`构建页面：${build.buildDetailsPageUrl ?? '未返回'}`)
+          console.error(`错误代码：${build.error?.errorCode ?? '未返回'}`)
+          console.error(`错误信息：${build.error?.message ?? '未返回'}`)
+          if (build.error?.docsUrl) console.error(`错误文档：${build.error.docsUrl}`)
+          const urls = Array.isArray(build.logFiles) ? build.logFiles : []
+          if (urls.length > 0) fs.writeFileSync('eas-log-urls.txt', `${urls.join('\n')}\n`)
+          for (const url of urls) console.error(`日志地址：${url.split('?')[0]}`)
+          NODE
+            mkdir -p eas-logs
+            if [[ -f eas-log-urls.txt ]]; then
+              index=0
+              while IFS= read -r url; do
+                [[ -z "${url}" ]] && continue
+                index=$((index + 1))
+                echo "---- EAS 构建日志（末 400 行）----"
+                raw="eas-logs/raw-${index}.bin"
+                if curl -fsSL --compressed -D "eas-logs/headers-${index}.txt" "${url}" -o "${raw}"; then
+                  grep -i -E '^(content-type|content-encoding|content-length):' "eas-logs/headers-${index}.txt" || true
+                  LOG_FILE="${raw}" node <<'NODE' | tee "eas-logs/build-${index}.txt" | tail -n 400
+          const fs = require('node:fs')
+          const zlib = require('node:zlib')
+          const buf = fs.readFileSync(process.env.LOG_FILE)
+          const looksText = (text) => {
+            const sample = text.slice(0, 4096)
+            if (!sample) return false
+            const printable = sample.replace(/[^\t\n\r\x20-\x7e\u4e00-\u9fff]/g, '').length
+            return printable / sample.length > 0.7
+          }
+          const decoders = [
+            ['gzip', () => zlib.gunzipSync(buf)],
+          ]
+          if (typeof zlib.zstdDecompressSync === 'function') {
+            decoders.push(['zstd', () => zlib.zstdDecompressSync(buf)])
+          }
+          decoders.push(
+            ['brotli', () => zlib.brotliDecompressSync(buf)],
+            ['deflate', () => zlib.inflateSync(buf)],
+          )
+          for (const [name, decode] of decoders) {
+            let text
+            try {
+              text = decode().toString('utf8')
+            } catch {
+              continue
+            }
+            if (!looksText(text)) continue
+            console.log(`日志解码：${name}`)
+            console.log(text.split(/\r?\n/).slice(-400).join('\n'))
+            process.exit(0)
+          }
+          console.log('未能识别日志压缩格式，输出原始字节前 64 位十六进制：')
+          console.log(buf.subarray(0, 64).toString('hex'))
+          console.log(buf.toString('utf8').split(/\r?\n/).slice(-400).join('\n'))
+          NODE
+                else
+                  echo "日志下载失败：${url%%\?*}"
+                fi
+              done < eas-log-urls.txt
+            fi
+            exit "${status}"
+          fi
           node <<'NODE'
           const fs = require('node:fs')
           const builds = JSON.parse(fs.readFileSync('eas-build.json', 'utf8'))
@@ -120,6 +204,16 @@ jobs:
             ].join('\n'),
           )
           NODE
+      - name: Upload EAS build logs
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: eas-android-logs-${{ github.run_id }}
+          path: |
+            eas-build.json
+            eas-logs
+          if-no-files-found: ignore
+          retention-days: 7
       - name: Download Android artifact
         run: |
           set -euo pipefail

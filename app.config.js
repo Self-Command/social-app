@@ -1,4 +1,6 @@
 // @ts-check
+const fs = require('node:fs')
+const path = require('node:path')
 const pkg = require('./package.json')
 
 /**
@@ -10,6 +12,14 @@ module.exports = function (_config) {
    * App version number. Should be incremented as part of a release cycle.
    */
   const VERSION = pkg.version
+
+  // 企业 Firebase 配置尚未建立：文件存在或通过 EAS 文件环境变量注入时才启用，
+  // 否则 Android 构建会因缺少 google-services.json 直接失败。
+  const GOOGLE_SERVICES_FILE =
+    process.env.GOOGLE_SERVICES_JSON ||
+    (fs.existsSync(path.join(__dirname, 'google-services.json'))
+      ? './google-services.json'
+      : undefined)
 
   /**
    * Uses built-in Expo env vars
@@ -202,7 +212,7 @@ module.exports = function (_config) {
           monochromeImage: './assets/icon-android-monochrome.png',
           backgroundColor: '#006AFF',
         },
-        googleServicesFile: './google-services.json',
+        googleServicesFile: GOOGLE_SERVICES_FILE,
         package: 'xyz.blueskyweb.app',
         intentFilters: [
           {
@@ -396,7 +406,8 @@ module.exports = function (_config) {
               compileSdkVersion: 37,
               targetSdkVersion: 36,
               buildToolsVersion: '37.0.0',
-              buildReactNativeFromSource: true,
+              // Hermes 仓库已从 facebook/hermes 迁移到 meta/hermes，RN 0.88 解压时
+              // 只剥离 facebook-hermes- 前缀，导致 CMake 找不到 CMakeLists.txt。
               enableMinifyInReleaseBuilds: true,
             },
           },
