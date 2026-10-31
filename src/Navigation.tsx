@@ -87,6 +87,7 @@ import {BottomBar} from '#/view/shell/bottom-bar/BottomBar'
 import {createNativeStackNavigatorWithAuth} from '#/view/shell/createNativeStackNavigatorWithAuth'
 import {DesktopLeftNav} from '#/view/shell/desktop/LeftNav'
 import {getNativeTabBarVisibility} from '#/view/shell/nativeTabBarVisibility'
+import {AnnouncementsScreen} from '#/screens/Announcements'
 import {AtmosphereScreen} from '#/screens/Atmosphere'
 import {BookmarksScreen} from '#/screens/Bookmarks'
 import {CustomFeedScreen} from '#/screens/CustomFeed'
@@ -399,6 +400,11 @@ function commonScreens(Stack: typeof Flat, unreadCountLabel?: string) {
         name="CopyrightPolicy"
         getComponent={() => CopyrightPolicyScreen}
         options={{title: title(msg`Copyright Policy`)}}
+      />
+      <Stack.Screen
+        name="Announcements"
+        getComponent={() => AnnouncementsScreen}
+        options={{title: title(msg`公告`)}}
       />
       <Stack.Screen
         name="AppPasswords"

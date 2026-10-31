@@ -29,6 +29,7 @@ import {type ListMethods} from '#/view/com/util/List'
 import {LoadLatestBtn} from '#/view/com/util/load-latest/LoadLatestBtn'
 import {MainScrollProvider} from '#/view/com/util/MainScrollProvider'
 import {useBreakpoints, useTheme} from '#/alf'
+import {AnnouncementBanner} from '#/components/announcements/AnnouncementBanner'
 import {useHeaderOffset} from '#/components/hooks/useHeaderOffset'
 import {EditBig_Stroke2_Corner2_Rounded as EditBigIcon} from '#/components/icons/EditBig'
 import {useAnalytics} from '#/analytics'
@@ -161,6 +162,9 @@ export function FeedPage({
             onHasNew={setHasNew}
             renderEmptyState={renderEmptyState}
             renderEndOfFeed={renderEndOfFeed}
+            ListHeaderComponent={
+              feed === 'following' ? AnnouncementBanner : undefined
+            }
             headerOffset={headerOffset}
             savedFeedConfig={savedFeedConfig}
             isVideoFeed={isVideoFeed}

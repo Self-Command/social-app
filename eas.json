@@ -27,7 +27,8 @@
         "buildType": "apk"
       },
       "env": {
-        "DISABLE_UPDATES": "1"
+        "DISABLE_UPDATES": "1",
+        "EXPO_PUBLIC_ADMIN_API_URL": "http://127.0.0.1:2587"
       }
     },
     "development-simulator": {

@@ -84,6 +84,20 @@ export const MOD_PROXY_DID: DidString | undefined =
   process.env.EXPO_PUBLIC_MOD_PROXY_DID
 
 /**
+ * The base URL of the admin service that serves public announcements. Leading
+ * and trailing whitespace and trailing slashes are removed. When unset or
+ * empty, announcements are disabled and no requests are made.
+ */
+export const ADMIN_API_URL: string | undefined = (() => {
+  const raw = process.env.EXPO_PUBLIC_ADMIN_API_URL
+  if (typeof raw !== 'string') return undefined
+  const configured = raw.trim()
+  if (!configured) return undefined
+  const normalized = configured.replace(/\/+$/, '')
+  return normalized || undefined
+})()
+
+/**
  * Metrics API host
  */
 export const METRICS_API_HOST: string =

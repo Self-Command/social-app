@@ -62,6 +62,12 @@ export type Device = {
   threadgateNudged?: boolean
   inviteFriendsFollowersPromoDismissed?: boolean
   /**
+   * Fingerprints of announcements dismissed on this device, most recent last.
+   * Fingerprints are derived from public announcement content and are only
+   * used locally; at most the most recent 50 are kept.
+   */
+  dismissedAnnouncements?: string[]
+  /**
    * Whether the trending topics widget has ever been seen installed on this
    * device, so `trendingWidget:installed` is only logged once.
    */
