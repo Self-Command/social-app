@@ -18,7 +18,9 @@ permissions:
 jobs:
   compile:
     name: iOS unsigned compile
-    runs-on: macos-15
+    # Xcode 26 ships Swift 6.2; React Native 0.88's SwiftPM dependency requires
+    # Swift tools 6.2, which the macos-15 image (Swift 6.1) cannot resolve.
+    runs-on: macos-26
     timeout-minutes: 120
     steps:
       - name: Check out repository
@@ -101,7 +103,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: ios-compile-log-${GITHUB_SHA::12}
+          name: ios-compile-log-${{ github.run_id }}
           path: xcodebuild.log
           if-no-files-found: warn
           retention-days: 7
