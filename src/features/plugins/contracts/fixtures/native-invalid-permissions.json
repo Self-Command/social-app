@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 2,
+  "id": "com.example.voicedemo",
+  "name": "语音演示",
+  "description": "用于契约测试的原生插件清单。",
+  "version": "1.0.0",
+  "hostApi": 2,
+  "nativeApi": 1,
+  "platforms": ["ios", "android"],
+  "slots": [{ "id": "composer.toolbar", "order": 60 }],
+  "capabilities": ["native.host", "composer.insertText"],
+  "settings": [],
+  "native": {
+    "package": "@community-plugins/voicedemo",
+    "modules": ["VoiceDemoModule"],
+    "views": [{ "name": "VoiceRecorderView", "heightMode": "content" }],
+    "minAppVersion": "2.0.0",
+    "network": { "outbound": [] }
+  }
+}

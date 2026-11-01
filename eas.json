@@ -74,6 +74,13 @@
         "EXPO_PUBLIC_ENV": "production"
       }
     },
+    "enterprise": {
+      "extends": "base",
+      "channel": "enterprise",
+      "env": {
+        "EXPO_PUBLIC_ENV": "production"
+      }
+    },
     "testflight": {
       "extends": "base",
       "ios": {

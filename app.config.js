@@ -1,6 +1,6 @@
 // @ts-check
-const fs = require('node:fs')
-const path = require('node:path')
+const fs = process.getBuiltinModule('node:fs')
+const path = process.getBuiltinModule('node:path')
 const pkg = require('./package.json')
 
 /**
@@ -241,7 +241,8 @@ module.exports = function (_config) {
         favicon: './assets/favicon.png',
       },
       updates: {
-        url: 'https://updates.bsky.app/manifest',
+        url:
+          process.env.EXPO_UPDATES_URL || 'https://updates.bsky.app/manifest',
         enabled: UPDATES_ENABLED,
         fallbackToCacheTimeout: 30000,
         codeSigningCertificate: UPDATES_ENABLED

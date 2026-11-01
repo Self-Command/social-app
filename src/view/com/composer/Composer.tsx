@@ -144,6 +144,7 @@ import {
   IS_WEB_SAFARI,
 } from '#/env'
 import {type Gif} from '#/features/gifPicker/types'
+import {ComposerToolbarSlot} from '#/features/plugins'
 import {app, chat} from '#/lexicons'
 import * as bsky from '#/types/bsky'
 import {
@@ -1410,6 +1411,7 @@ export const ComposePost = ({
         languageNudgeAt={languageNudgeAt}
         openGallery={openGallery}
         textInputRef={textInputRef}
+        onCloseComposer={closeComposer}
       />
     </>
   )
@@ -2126,6 +2128,7 @@ function ComposerFooter({
   languageNudgeAt,
   openGallery,
   textInputRef,
+  onCloseComposer,
 }: {
   post: PostDraft
   dispatch: (action: PostAction) => void
@@ -2141,6 +2144,7 @@ function ComposerFooter({
   languageNudgeAt: number
   openGallery?: boolean
   textInputRef: React.RefObject<TextInputRef | null>
+  onCloseComposer: () => void
 }) {
   const t = useTheme()
   const {t: l} = useLingui()
@@ -2285,6 +2289,13 @@ function ComposerFooter({
             </ToolbarWrapper>
           )}
         </LayoutAnimationConfig>
+        <ComposerToolbarSlot
+          text={post.richtext.text}
+          onChangeRichText={richText => {
+            dispatch({type: 'update_richtext', richtext: richText})
+          }}
+          onCloseComposer={onCloseComposer}
+        />
       </View>
       <View style={[a.flex_row, a.align_center, a.justify_between]}>
         {showAddButton && (

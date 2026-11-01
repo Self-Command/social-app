@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 2,
+  "id": "com.selfcommand.bookmarks",
+  "name": "本地收藏",
+  "description": "将帖子收藏到当前账号的本地设备，并在发帖时插入收藏链接。",
+  "version": "1.0.0",
+  "hostApi": 2,
+  "platforms": ["ios", "android", "web"],
+  "slots": [
+    { "id": "composer.toolbar", "order": 100 },
+    { "id": "feed.item.footer", "order": 100 },
+    { "id": "settings.main.section", "order": 100 }
+  ],
+  "capabilities": [
+    "feed.read",
+    "composer.insertText",
+    "storage.local",
+    "toast.show"
+  ],
+  "settings": [
+    {
+      "key": "maxItems",
+      "type": "number",
+      "label": "收藏数量上限",
+      "description": "单个账号最多可保存的收藏条数，允许范围 10 至 500。",
+      "default": 100,
+      "min": 10,
+      "max": 500
+    }
+  ]
+}

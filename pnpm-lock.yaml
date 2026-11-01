@@ -286,6 +286,9 @@ importers:
       '@bsky.app/peek-menu':
         specifier: ^0.3.2
         version: 0.3.2(expo@58.0.19)(react-native@0.88.0(patch_hash=dc5394dccd29a3cc7ec7079a8fae133938d92a99a5f7fdd73ed5ef94dd868a96)(@babel/core@7.29.7(supports-color@8.1.1))(@react-native/metro-config@0.88.0(@babel/core@7.29.7(supports-color@8.1.1))(supports-color@8.1.1))(@types/react@19.3.0)(react@19.3.0)(supports-color@8.1.1))(react@19.3.0)
+      '@bsky.app/plugin-native-host':
+        specifier: link:./modules/plugin-native-host
+        version: link:modules/plugin-native-host
       '@bsky.app/react-native-scroll-forwarder':
         specifier: link:./modules/react-native-scroll-forwarder
         version: link:modules/react-native-scroll-forwarder

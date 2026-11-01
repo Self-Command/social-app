@@ -54,6 +54,7 @@ import {RichText} from '#/components/RichText'
 import {SubtleHover} from '#/components/SubtleHover'
 import {Features, useAnalytics} from '#/analytics'
 import {useActorStatus} from '#/features/liveNow'
+import {FeedItemFooterSlot} from '#/features/plugins'
 import {app} from '#/lexicons'
 import * as bsky from '#/types/bsky'
 import {PostFeedReason} from './PostFeedReason'
@@ -457,6 +458,7 @@ let FeedItemInner = ({
               onShowLess={onShowLess}
               viaRepost={viaRepost}
             />
+            <FeedItemFooterSlot post={post} record={record} />
             <KnownLikers
               post={post}
               feature={Features.PostFeedKnownLikersEnable}

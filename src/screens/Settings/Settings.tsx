@@ -70,6 +70,8 @@ import {Text} from '#/components/Typography'
 import {useAnalytics} from '#/analytics'
 import {IS_INTERNAL, IS_IOS, IS_NATIVE} from '#/env'
 import {useActorStatus} from '#/features/liveNow'
+import {SettingsSectionSlot} from '#/features/plugins'
+import {PluginDiagnostics} from '#/features/plugins/host/PluginDiagnostics'
 import {type app} from '#/lexicons'
 import {device, useStorage} from '#/storage'
 import {useActivitySubscriptionsNudged} from '#/storage/hooks/activity-subscriptions-nudged'
@@ -290,6 +292,7 @@ export function SettingsScreen({}: Props) {
               <Trans>About</Trans>
             </SettingsList.ItemText>
           </SettingsList.LinkItem>
+          <SettingsSectionSlot />
           <SettingsList.Divider />
           <SettingsList.PressableItem
             destructive
@@ -595,6 +598,8 @@ function DevOptions() {
           </Button>
         </View>
       </View>
+      <SettingsList.Divider />
+      <PluginDiagnostics />
       <SettingsList.Divider />
     </>
   )

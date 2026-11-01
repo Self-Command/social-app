@@ -85,6 +85,11 @@ import {
   prefetchLiveEvents,
   Provider as LiveEventsProvider,
 } from '#/features/liveEvents/context'
+import {pluginCatalog} from '#/features/plugins/catalog'
+import {NATIVE_PLUGIN_LOCK} from '#/features/plugins/generated/native-lock'
+import {NATIVE_PLUGIN_REGISTRY} from '#/features/plugins/generated/native-registry'
+import {PluginProvider} from '#/features/plugins/runtime/PluginProvider'
+import {type PluginToast} from '#/features/plugins/sdk'
 import {TrendingTopicsWidgetSync} from '#/features/trendingWidget/Sync'
 import * as Geo from '#/geolocation'
 import {Splash} from '#/Splash'
@@ -107,6 +112,10 @@ void Geo.resolve()
 void prefetchAgeAssuranceConfig()
 void prefetchLiveEvents()
 void prefetchAppConfig()
+
+function createPluginToast(): PluginToast {
+  return {show: message => Toast.show(message)}
+}
 
 function InnerApp() {
   const [isReady, setIsReady] = useState(false)
@@ -149,62 +158,70 @@ function InnerApp() {
           <Splash isReady={isReady && hasCheckedLanding}>
             <VideoVolumeProvider>
               <GestureHandlerRootView style={a.h_full}>
-                <Fragment
-                  // Resets the entire tree below when it changes:
-                  key={currentAccount?.did}>
-                  <AnalyticsFeaturesContext>
-                    <QueryProvider currentDid={currentAccount?.did}>
-                      <BetaUserStorageSync />
-                      <PolicyUpdateOverlayProvider>
-                        <LiveEventsProvider>
-                          <AgeAssuranceV2Provider>
-                            <ComposerProvider>
-                              <MessagesProvider>
-                                {/* LabelDefsProvider MUST come before ModerationOptsProvider */}
-                                <LabelDefsProvider>
-                                  <ModerationOptsProvider>
-                                    <LoggedOutViewProvider>
-                                      <SelectedFeedProvider>
-                                        <HiddenRepliesProvider>
-                                          <HomeBadgeProvider>
-                                            <UnreadNotifsProvider>
-                                              <BackgroundNotificationPreferencesProvider>
-                                                <MutedThreadsProvider>
-                                                  <ProgressGuideProvider>
-                                                    <ServiceAccountManager>
-                                                      <TrendingTopicsWidgetSync />
-                                                      <EmailVerificationProvider>
-                                                        <HideBottomBarBorderProvider>
-                                                          <GlobalGestureEventsProvider>
-                                                            <IntentDialogProvider>
-                                                              <TranslateOnDeviceProvider>
-                                                                <TestCtrls />
-                                                                <Shell />
-                                                              </TranslateOnDeviceProvider>
-                                                            </IntentDialogProvider>
-                                                          </GlobalGestureEventsProvider>
-                                                        </HideBottomBarBorderProvider>
-                                                      </EmailVerificationProvider>
-                                                    </ServiceAccountManager>
-                                                  </ProgressGuideProvider>
-                                                </MutedThreadsProvider>
-                                              </BackgroundNotificationPreferencesProvider>
-                                            </UnreadNotifsProvider>
-                                          </HomeBadgeProvider>
-                                        </HiddenRepliesProvider>
-                                      </SelectedFeedProvider>
-                                    </LoggedOutViewProvider>
-                                  </ModerationOptsProvider>
-                                </LabelDefsProvider>
-                              </MessagesProvider>
-                            </ComposerProvider>
-                          </AgeAssuranceV2Provider>
-                        </LiveEventsProvider>
-                      </PolicyUpdateOverlayProvider>
-                    </QueryProvider>
-                  </AnalyticsFeaturesContext>
-                </Fragment>
-                <ToastOutlet />
+                <PluginProvider
+                  plugins={pluginCatalog}
+                  createToast={createPluginToast}
+                  native={{
+                    registry: NATIVE_PLUGIN_REGISTRY,
+                    lock: NATIVE_PLUGIN_LOCK,
+                  }}>
+                  <Fragment
+                    // Resets the entire tree below when it changes:
+                    key={currentAccount?.did}>
+                    <AnalyticsFeaturesContext>
+                      <QueryProvider currentDid={currentAccount?.did}>
+                        <BetaUserStorageSync />
+                        <PolicyUpdateOverlayProvider>
+                          <LiveEventsProvider>
+                            <AgeAssuranceV2Provider>
+                              <ComposerProvider>
+                                <MessagesProvider>
+                                  {/* LabelDefsProvider MUST come before ModerationOptsProvider */}
+                                  <LabelDefsProvider>
+                                    <ModerationOptsProvider>
+                                      <LoggedOutViewProvider>
+                                        <SelectedFeedProvider>
+                                          <HiddenRepliesProvider>
+                                            <HomeBadgeProvider>
+                                              <UnreadNotifsProvider>
+                                                <BackgroundNotificationPreferencesProvider>
+                                                  <MutedThreadsProvider>
+                                                    <ProgressGuideProvider>
+                                                      <ServiceAccountManager>
+                                                        <TrendingTopicsWidgetSync />
+                                                        <EmailVerificationProvider>
+                                                          <HideBottomBarBorderProvider>
+                                                            <GlobalGestureEventsProvider>
+                                                              <IntentDialogProvider>
+                                                                <TranslateOnDeviceProvider>
+                                                                  <TestCtrls />
+                                                                  <Shell />
+                                                                </TranslateOnDeviceProvider>
+                                                              </IntentDialogProvider>
+                                                            </GlobalGestureEventsProvider>
+                                                          </HideBottomBarBorderProvider>
+                                                        </EmailVerificationProvider>
+                                                      </ServiceAccountManager>
+                                                    </ProgressGuideProvider>
+                                                  </MutedThreadsProvider>
+                                                </BackgroundNotificationPreferencesProvider>
+                                              </UnreadNotifsProvider>
+                                            </HomeBadgeProvider>
+                                          </HiddenRepliesProvider>
+                                        </SelectedFeedProvider>
+                                      </LoggedOutViewProvider>
+                                    </ModerationOptsProvider>
+                                  </LabelDefsProvider>
+                                </MessagesProvider>
+                              </ComposerProvider>
+                            </AgeAssuranceV2Provider>
+                          </LiveEventsProvider>
+                        </PolicyUpdateOverlayProvider>
+                      </QueryProvider>
+                    </AnalyticsFeaturesContext>
+                  </Fragment>
+                  <ToastOutlet />
+                </PluginProvider>
               </GestureHandlerRootView>
             </VideoVolumeProvider>
           </Splash>

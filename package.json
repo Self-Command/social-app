@@ -111,6 +111,10 @@
     "icons:generate": "node ./scripts/icons/generate.mts",
     "icons:check": "node ./scripts/icons/generate.mts --check",
     "icons:test": "node --test ./scripts/icons/lib.test.mts",
+    "plugins:check": "node ./scripts/plugins/check.mjs",
+    "plugins:check:test": "node --test ./scripts/plugins/plugins-check.test.mjs",
+    "catalog:generate": "node ./scripts/generate-slot-catalog.mjs",
+    "catalog:check": "node ./scripts/generate-slot-catalog.mjs --check",
     "prettier": "prettier --check ."
   },
   "dependencies": {
@@ -132,6 +136,7 @@
     "@bsky.app/expo-scroll-edge-effect": "^0.1.10",
     "@bsky.app/expo-translate-text": "^0.2.9",
     "@bsky.app/peek-menu": "^0.3.2",
+    "@bsky.app/plugin-native-host": "link:./modules/plugin-native-host",
     "@bsky.app/react-native-scroll-forwarder": "link:./modules/react-native-scroll-forwarder",
     "@bsky.app/react-native-uitextview": "^2.7.1",
     "@bsky.app/sift": "^0.3.9",

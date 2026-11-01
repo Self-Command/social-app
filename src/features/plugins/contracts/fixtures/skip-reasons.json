@@ -1,0 +1,12 @@
+{
+  "native_api_mismatch": "插件要求的原生宿主版本与应用不一致。",
+  "host_api_mismatch": "插件要求的 JS 宿主版本与应用不一致。",
+  "manifest_mismatch": "插件清单与原生锁中记录的摘要不一致。",
+  "native_not_compiled": "当前应用构建未编译该原生插件。",
+  "native_module_missing": "原生插件声明的模块未在注册表中找到。",
+  "native_view_missing": "原生插件声明的视图未在注册表中找到。",
+  "min_app_version": "应用版本低于插件要求的最低版本。",
+  "revoked": "插件已从当前渠道撤销。",
+  "disabled": "插件已被管理员停用。",
+  "circuit_open": "插件连续失败触发熔断，等待注册表修订、切换账号或重启。"
+}

@@ -1,0 +1,9 @@
+{
+  "platforms": ["ios", "android"],
+  "ios": {
+    "modules": ["PluginNativeHostModule"]
+  },
+  "android": {
+    "modules": ["expo.modules.pluginnativehost.PluginNativeHostModule"]
+  }
+}

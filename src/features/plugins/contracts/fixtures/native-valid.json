@@ -1,0 +1,49 @@
+{
+  "schemaVersion": 2,
+  "id": "com.example.voicedemo",
+  "name": "语音演示",
+  "description": "用于契约测试的原生插件清单。",
+  "version": "1.0.0",
+  "hostApi": 2,
+  "nativeApi": 1,
+  "platforms": ["ios", "android", "web"],
+  "slots": [
+    { "id": "feed.item.footer", "order": 50 },
+    { "id": "composer.toolbar", "order": 60 },
+    { "id": "settings.main.section", "order": 80 }
+  ],
+  "capabilities": [
+    "feed.read",
+    "composer.insertText",
+    "storage.local",
+    "toast.show",
+    "native.host",
+    "native.permissions",
+    "native.ui",
+    "events.subscribe"
+  ],
+  "settings": [
+    {
+      "key": "prefix",
+      "type": "string",
+      "label": "前缀",
+      "description": "插入评论前显示的提示文字。",
+      "default": "语音",
+      "maxLength": 8
+    }
+  ],
+  "native": {
+    "package": "@community-plugins/voicedemo",
+    "modules": ["VoiceDemoModule"],
+    "views": [
+      { "name": "VoiceRecorderView", "heightMode": "content" },
+      { "name": "VoicePlayerView", "heightMode": "fixed" }
+    ],
+    "permissions": [
+      { "name": "microphone", "reason": "录制语音评论需要访问麦克风。" },
+      { "name": "notifications", "reason": "语音评论完成后提醒用户。" }
+    ],
+    "minAppVersion": "2.0.0",
+    "network": { "outbound": ["https://api.example.com"] }
+  }
+}
