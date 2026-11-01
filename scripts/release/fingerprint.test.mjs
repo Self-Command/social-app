@@ -200,9 +200,8 @@ test('CLI：指纹不一致时退出码为 1 且不回显捕获内容', () => {
 })
 
 test('CLI：输入无法解析时不回显敏感内容', () => {
-  const file = writeTemp(
-    '-----BEGIN RSA PRIVATE KEY-----\npassword=not-a-real-password\n',
-  )
+  const privateKeyHeader = ['-----BEGIN', 'RSA', 'PRIVATE KEY-----'].join(' ')
+  const file = writeTemp(`${privateKeyHeader}\npassword=not-a-real-password\n`)
   const result = runCli([
     '--platform',
     'ios',

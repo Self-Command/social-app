@@ -343,6 +343,7 @@ test('store-packet 可被自身解析器列出且不含秘密文件', () => {
 
 test('资料包拒绝包含私钥内容', () => {
   const root = tempRoot()
+  const privateKeyHeader = ['-----BEGIN', 'RSA', 'PRIVATE KEY-----'].join(' ')
   const lockFile = write(
     root,
     'lock-with-key.json',
@@ -350,7 +351,7 @@ test('资料包拒绝包含私钥内容', () => {
       lockVersion: 1,
       plugins: [PLUGIN],
       lockHash: LOCK_HASH,
-      note: '-----BEGIN RSA PRIVATE KEY-----',
+      note: privateKeyHeader,
     }),
   )
   expectFailure(() => packageArtifacts(baseOptions(root, {lockFile})), /私钥/)
