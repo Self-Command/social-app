@@ -1,0 +1,691 @@
+name: Workspace Native Release
+
+# 仅接受后台发起的手动派发：构建单号、固定提交、插件锁、档案、平台、渠道、
+# 回调地址与签名指纹都由后台生成。工作流不响应 push、pull_request 或 fork 事件。
+# workflow_dispatch 只识别默认分支上的工作流；首次启用需将本文件合入默认分支。
+on:
+  workflow_dispatch:
+    inputs:
+      build_id:
+        description: 后台构建单号
+        required: true
+        type: string
+      profile:
+        description: 发布档案
+        required: true
+        type: choice
+        options:
+          - enterprise
+          - production
+          - testflight
+        default: enterprise
+      platform:
+        description: 目标平台
+        required: true
+        type: choice
+        options:
+          - android
+          - ios
+        default: android
+      channel:
+        description: 发布渠道
+        required: true
+        type: choice
+        options:
+          - enterprise
+          - google_play
+          - app_store
+          - china_store
+          - development
+        default: enterprise
+      version:
+        description: 版本号（语义化版本）
+        required: true
+        type: string
+      build_number:
+        description: 构建号（正整数）
+        required: true
+        type: string
+      plugin_lock:
+        description: native-plugin-lock.json 内容
+        required: true
+        type: string
+      callback_url:
+        description: 回调后台的 HTTPS 地址
+        required: true
+        type: string
+      signing_fingerprint:
+        description: 后台登记的签名证书 SHA-256 指纹
+        required: true
+        type: string
+      app_revision:
+        description: App 仓库固定提交
+        required: true
+        type: string
+
+concurrency:
+  group: native-release-${{ inputs.profile }}-${{ inputs.platform }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    name: Native ${{ inputs.platform }} (${{ inputs.channel }})
+    runs-on: ${{ inputs.platform == 'ios' && 'macos-26-xlarge' || 'ubuntu-24.04' }}
+    environment: native-release
+    timeout-minutes: 240
+    # 工作流只向本仓库写 Release，不写仓库内容、不推送、不改历史。
+    permissions:
+      contents: write
+    env:
+      WORK: ${{ github.workspace }}/.native-build
+      EXPO_TOKEN: ${{ secrets.NATIVE_RELEASE_EXPO_TOKEN }}
+      NATIVE_RELEASE_VERSION: ${{ inputs.version }}
+      NATIVE_RELEASE_BUILD_NUMBER: ${{ inputs.build_number }}
+      EAS_LOCAL_BUILD_SKIP_CLEANUP: '1'
+      CI: '1'
+      EXPO_NO_GIT_STATUS: '1'
+      EXPO_NO_TELEMETRY: '1'
+      PUPPETEER_SKIP_DOWNLOAD: 'true'
+    steps:
+      - name: 检出固定提交
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.app_revision }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: 校验派发参数
+        id: dispatch
+        env:
+          PLUGIN_LOCK: ${{ inputs.plugin_lock }}
+          PLUGIN_REPOS: ${{ vars.NATIVE_RELEASE_PLUGIN_REPOS }}
+          RELEASE_REPO: ${{ vars.NATIVE_RELEASE_GITHUB_REPO }}
+          BUILD_ID: ${{ inputs.build_id }}
+          PROFILE: ${{ inputs.profile }}
+          PLATFORM: ${{ inputs.platform }}
+          CHANNEL: ${{ inputs.channel }}
+          VERSION: ${{ inputs.version }}
+          BUILD_NUMBER: ${{ inputs.build_number }}
+          CALLBACK_URL: ${{ inputs.callback_url }}
+          SIGNING_FINGERPRINT: ${{ inputs.signing_fingerprint }}
+          APP_REVISION: ${{ inputs.app_revision }}
+          LOCK_FILE: ${{ github.workspace }}/.native-build/inputs/native-plugin-lock.json
+        run: |
+          set -euo pipefail
+          mkdir -p "$WORK/inputs"
+          printf 'validate\n' > "$WORK/stage.txt"
+          if [[ -z "${PLUGIN_LOCK//[[:space:]]/}" ]]; then
+            echo "::error::plugin_lock 为空。"
+            exit 1
+          fi
+          if [[ -z "${PLUGIN_REPOS}" ]]; then
+            echo "::error::缺少仓库变量 NATIVE_RELEASE_PLUGIN_REPOS。"
+            exit 1
+          fi
+          if [[ -z "${RELEASE_REPO}" ]]; then
+            echo "::error::缺少仓库变量 NATIVE_RELEASE_GITHUB_REPO。"
+            exit 1
+          fi
+          node -e '
+            const fs = require("node:fs");
+            const raw = process.env.PLUGIN_LOCK ?? "";
+            try {
+              JSON.parse(raw);
+            } catch {
+              console.error("plugin_lock 不是合法 JSON");
+              process.exit(1);
+            }
+            fs.writeFileSync(
+              process.env.LOCK_FILE,
+              raw.endsWith("\n") ? raw : `${raw}\n`,
+              "utf8",
+            );
+          '
+          NONCE="$(node -e 'console.log(require("node:crypto").randomBytes(24).toString("hex"))')"
+          echo "CALLBACK_NONCE=${NONCE}" >> "$GITHUB_ENV"
+          node scripts/release/prepare-native-dispatch.mjs \
+            --work "$WORK" \
+            --lock "$LOCK_FILE" \
+            --build-id "$BUILD_ID" \
+            --profile "$PROFILE" \
+            --platform "$PLATFORM" \
+            --channel "$CHANNEL" \
+            --version "$VERSION" \
+            --build-number "$BUILD_NUMBER" \
+            --callback-url "$CALLBACK_URL" \
+            --nonce "$NONCE" \
+            --signing-fingerprint "$SIGNING_FINGERPRINT" \
+            --plugin-repos "$PLUGIN_REPOS" \
+            --github-repo "${{ github.repository }}" \
+            --release-repo "$RELEASE_REPO" \
+            --app-revision "$APP_REVISION"
+
+      - name: 标记装配阶段
+        run: printf 'setup\n' > "$WORK/stage.txt"
+
+      - name: 配置 JDK 17
+        if: inputs.platform == 'android'
+        uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: 安装 Android SDK 组件
+        if: inputs.platform == 'android'
+        run: |
+          set -euo pipefail
+          SDK="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-}}"
+          if [[ -z "${SDK}" || ! -d "${SDK}" ]]; then
+            echo "::error::运行器未提供 Android SDK。"
+            exit 1
+          fi
+          SDKM="$(find "${SDK}/cmdline-tools" -mindepth 2 -maxdepth 3 -name sdkmanager | sort -V | tail -1)"
+          if [[ -z "${SDKM}" ]]; then
+            echo "::error::未找到 sdkmanager。"
+            exit 1
+          fi
+          yes | "${SDKM}" --licenses > /dev/null 2>&1 || true
+          "${SDKM}" "platforms;android-37.0" "build-tools;37.0.0" "ndk;27.1.12297006" "cmake;3.22.1"
+
+      - name: 缓存 Gradle
+        if: inputs.platform == 'android'
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-native-${{ hashFiles('pnpm-lock.yaml', 'package.json') }}
+          restore-keys: |
+            gradle-${{ runner.os }}-native-
+            gradle-${{ runner.os }}-
+
+      - name: 配置 Xcode 26.4
+        if: inputs.platform == 'ios'
+        uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1.7.0
+        with:
+          xcode-version: '26.4'
+
+      - name: 安装依赖与 EAS CLI
+        uses: ./.github/actions/setup-expo-project
+        with:
+          expo-token: ${{ secrets.NATIVE_RELEASE_EXPO_TOKEN }}
+
+      - name: 编译本地化文案
+        run: pnpm intl:compile
+
+      - name: 装配原生插件
+        env:
+          PLUGIN_CHECKOUT_TOKEN: ${{ secrets.NATIVE_RELEASE_PLUGIN_CHECKOUT_TOKEN }}
+        run: |
+          set -euo pipefail
+          printf 'assemble\n' > "$WORK/stage.txt"
+          if [[ -z "${PLUGIN_CHECKOUT_TOKEN}" ]]; then
+            echo "::error::缺少 NATIVE_RELEASE_PLUGIN_CHECKOUT_TOKEN，无法读取插件仓库。"
+            exit 1
+          fi
+          HEADER="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$PLUGIN_CHECKOUT_TOKEN" | base64 | tr -d '\n')"
+          echo "::add-mask::${HEADER}"
+          export PLUGIN_GIT_HEADER="$HEADER"
+          node scripts/plugins/prepare-native-build.mjs \
+            --lock "$WORK/inputs/native-plugin-lock.json" \
+            --sources "$WORK/inputs/sources.json" \
+            --work "$WORK" \
+            --app-root . \
+            --fetch
+
+      - name: 扫描与类型检查
+        run: |
+          set -euo pipefail
+          printf 'check\n' > "$WORK/stage.txt"
+          pnpm plugins:check
+          pnpm "typecheck:${PLATFORM}"
+
+      - name: 生成原生工程
+        run: |
+          set -euo pipefail
+          printf 'prebuild\n' > "$WORK/stage.txt"
+          export EXPO_PUBLIC_ENV=production
+          npx expo prebuild --platform "$PLATFORM" --no-install
+
+      - name: 校验原生工程
+        run: |
+          set -euo pipefail
+          printf 'verify\n' > "$WORK/stage.txt"
+          node scripts/plugins/verify-prebuild.mjs \
+            --app-root . \
+            --platform "$PLATFORM" \
+            --out "$WORK/verify-prebuild.json"
+
+      - name: 校验渠道裁剪
+        env:
+          OUT: ${{ github.workspace }}/.native-build/channel-assertion.json
+        run: |
+          set -euo pipefail
+          printf 'channel\n' > "$WORK/stage.txt"
+          if [[ "$PLATFORM" == "android" ]]; then
+            node scripts/plugins/assert-channel.mjs \
+              --channel "$CHANNEL" \
+              --root . \
+              --out "$WORK/channel-assertion.json" \
+              --require-manifest
+          else
+            OUT="$OUT" node -e '
+              const fs = require("node:fs");
+              fs.writeFileSync(
+                process.env.OUT,
+                `${JSON.stringify(
+                  {
+                    channel: process.env.CHANNEL,
+                    platform: "ios",
+                    status: "not-applicable",
+                  },
+                  null,
+                  2,
+                )}\n`,
+                "utf8",
+              );
+            '
+          fi
+
+      - name: 准备 EAS 本地构建
+        run: |
+          set -euo pipefail
+          printf 'prepare\n' > "$WORK/stage.txt"
+          mkdir -p "$WORK/native-project" "$WORK/output"
+          # EAS 工作目录必须位于仓库之外，避免把刚刚生成的工程再次复制进自身。
+          echo "EAS_LOCAL_BUILD_WORKINGDIR=${RUNNER_TEMP}/native-eas" >> "$GITHUB_ENV"
+          for dir in android ios; do
+            if [[ -d "$dir" ]]; then
+              mv "$dir" "$WORK/native-project/$dir"
+            fi
+          done
+          cp eas.json "$WORK/eas.json.bak"
+          node scripts/release/prepare-native-eas.mjs \
+            --eas eas.json \
+            --profile "$PROFILE" \
+            --channel "$CHANNEL"
+
+      - name: 配置 Android 签名
+        if: inputs.platform == 'android'
+        env:
+          KEYSTORE_BASE64: ${{ secrets.NATIVE_RELEASE_ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.NATIVE_RELEASE_ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.NATIVE_RELEASE_ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.NATIVE_RELEASE_ANDROID_KEY_PASSWORD }}
+          EXPECTED_FINGERPRINT: ${{ inputs.signing_fingerprint }}
+        run: |
+          set -euo pipefail
+          printf 'signing\n' > "$WORK/stage.txt"
+          for name in KEYSTORE_BASE64 KEYSTORE_PASSWORD KEY_ALIAS KEY_PASSWORD; do
+            if [[ -z "${!name:-}" ]]; then
+              echo "::error::缺少 Android 签名配置：${name}。"
+              exit 1
+            fi
+          done
+          SIGNING_DIR="$WORK/signing"
+          mkdir -p "$SIGNING_DIR"
+          DATA="$KEYSTORE_BASE64" OUT="$SIGNING_DIR/release.keystore" node -e '
+            const fs = require("node:fs");
+            fs.writeFileSync(process.env.OUT, Buffer.from(process.env.DATA, "base64"), {
+              mode: 0o600,
+            });
+          '
+          chmod 600 "$SIGNING_DIR/release.keystore"
+          KS_PASS="$KEYSTORE_PASSWORD" keytool -list -v \
+            -keystore "$SIGNING_DIR/release.keystore" \
+            -alias "$KEY_ALIAS" \
+            -storepass:env KS_PASS > "$SIGNING_DIR/keytool.txt"
+          node scripts/release/fingerprint.mjs \
+            --platform android \
+            --expected "$EXPECTED_FINGERPRINT" \
+            --input "$SIGNING_DIR/keytool.txt"
+          ACTUAL="$(node --input-type=module -e '
+            import fs from "node:fs";
+            import {parseAndroidFingerprint} from "./scripts/release/fingerprint.mjs";
+            console.log(parseAndroidFingerprint(fs.readFileSync(process.argv[1], "utf8")));
+          ' "$SIGNING_DIR/keytool.txt")"
+          echo "ACTUAL_SIGNING_FINGERPRINT=${ACTUAL}" >> "$GITHUB_ENV"
+          KEYSTORE_PATH="$SIGNING_DIR/release.keystore" node -e '
+            const fs = require("node:fs");
+            fs.writeFileSync(
+              "credentials.json",
+              JSON.stringify({
+                android: {
+                  keystore: {
+                    keystorePath: process.env.KEYSTORE_PATH,
+                    keystorePassword: process.env.KEYSTORE_PASSWORD,
+                    keyAlias: process.env.KEY_ALIAS,
+                    keyPassword: process.env.KEY_PASSWORD,
+                  },
+                },
+              }),
+              {mode: 0o600},
+            );
+          '
+          printf '%s' "$KEYSTORE_PASSWORD" > "$SIGNING_DIR/ks-pass.txt"
+          printf '%s' "$KEY_PASSWORD" > "$SIGNING_DIR/key-pass.txt"
+          chmod 600 credentials.json "$SIGNING_DIR/ks-pass.txt" "$SIGNING_DIR/key-pass.txt"
+
+      - name: 配置 iOS 签名
+        if: inputs.platform == 'ios'
+        env:
+          CERT_BASE64: ${{ secrets.NATIVE_RELEASE_IOS_CERT_P12_BASE64 }}
+          CERT_PASSWORD: ${{ secrets.NATIVE_RELEASE_IOS_CERT_PASSWORD }}
+          PROVISION_BASE64: ${{ secrets.NATIVE_RELEASE_IOS_PROVISION_BASE64 }}
+          EXPECTED_FINGERPRINT: ${{ inputs.signing_fingerprint }}
+        run: |
+          set -euo pipefail
+          printf 'signing\n' > "$WORK/stage.txt"
+          for name in CERT_BASE64 CERT_PASSWORD PROVISION_BASE64; do
+            if [[ -z "${!name:-}" ]]; then
+              echo "::error::缺少 iOS 签名配置：${name}。"
+              exit 1
+            fi
+          done
+          SIGNING_DIR="$WORK/signing"
+          mkdir -p "$SIGNING_DIR"
+          DATA="$CERT_BASE64" OUT="$SIGNING_DIR/distribution.p12" node -e '
+            const fs = require("node:fs");
+            fs.writeFileSync(process.env.OUT, Buffer.from(process.env.DATA, "base64"), {
+              mode: 0o600,
+            });
+          '
+          DATA="$PROVISION_BASE64" OUT="$SIGNING_DIR/profile.mobileprovision" node -e '
+            const fs = require("node:fs");
+            fs.writeFileSync(process.env.OUT, Buffer.from(process.env.DATA, "base64"), {
+              mode: 0o600,
+            });
+          '
+          chmod 600 "$SIGNING_DIR/distribution.p12" "$SIGNING_DIR/profile.mobileprovision"
+          P12_PASS="$CERT_PASSWORD" openssl pkcs12 \
+            -in "$SIGNING_DIR/distribution.p12" \
+            -clcerts -nokeys \
+            -passin env:P12_PASS \
+            -out "$SIGNING_DIR/certificate.pem"
+          openssl x509 -in "$SIGNING_DIR/certificate.pem" -noout -fingerprint -sha256 \
+            > "$SIGNING_DIR/openssl.txt"
+          node scripts/release/fingerprint.mjs \
+            --platform ios \
+            --expected "$EXPECTED_FINGERPRINT" \
+            --input "$SIGNING_DIR/openssl.txt"
+          ACTUAL="$(node --input-type=module -e '
+            import fs from "node:fs";
+            import {parseIosFingerprint} from "./scripts/release/fingerprint.mjs";
+            console.log(parseIosFingerprint(fs.readFileSync(process.argv[1], "utf8")));
+          ' "$SIGNING_DIR/openssl.txt")"
+          echo "ACTUAL_SIGNING_FINGERPRINT=${ACTUAL}" >> "$GITHUB_ENV"
+          CERT_PATH="$SIGNING_DIR/distribution.p12" PROFILE_PATH="$SIGNING_DIR/profile.mobileprovision" node -e '
+            const fs = require("node:fs");
+            fs.writeFileSync(
+              "credentials.json",
+              JSON.stringify({
+                ios: {
+                  provisioningProfilePath: process.env.PROFILE_PATH,
+                  distributionCertificate: {
+                    path: process.env.CERT_PATH,
+                    password: process.env.CERT_PASSWORD,
+                  },
+                },
+              }),
+              {mode: 0o600},
+            );
+          '
+          chmod 600 credentials.json
+
+      - name: EAS 本地构建
+        uses: ./.github/actions/eas-local-build
+        with:
+          platform: ${{ inputs.platform }}
+          profile: native-release
+          output: ${{ github.workspace }}/.native-build/output/build.${{ inputs.platform == 'ios' && 'tar.gz' || 'aab' }}
+          log-path: ${{ github.workspace }}/.native-build/eas-build.log
+
+      - name: 收集 Android 产物
+        if: inputs.platform == 'android'
+        env:
+          KEY_ALIAS: ${{ secrets.NATIVE_RELEASE_ANDROID_KEY_ALIAS }}
+        run: |
+          set -euo pipefail
+          printf 'package\n' > "$WORK/stage.txt"
+          mkdir -p "$WORK/input-artifacts"
+          AAB="$WORK/output/build.aab"
+          if [[ ! -s "$AAB" ]]; then
+            echo "::error::EAS 未生成 AAB。"
+            exit 1
+          fi
+          cp "$AAB" "$WORK/input-artifacts/app.aab"
+          bundletool build-apks \
+            --bundle="$AAB" \
+            --output="$WORK/input-artifacts/app.apks" \
+            --mode=universal \
+            --ks="$WORK/signing/release.keystore" \
+            --ks-pass=file:"$WORK/signing/ks-pass.txt" \
+            --ks-key-alias="$KEY_ALIAS" \
+            --key-pass=file:"$WORK/signing/key-pass.txt"
+          unzip -p "$WORK/input-artifacts/app.apks" universal.apk \
+            > "$WORK/input-artifacts/app-universal.apk"
+          rm -f "$WORK/input-artifacts/app.apks"
+          MAPPING="$(find "$EAS_LOCAL_BUILD_WORKINGDIR" -path '*mapping/release/mapping.txt' -type f -print -quit 2>/dev/null || true)"
+          if [[ -n "$MAPPING" ]]; then
+            cp "$MAPPING" "$WORK/input-artifacts/mapping.txt"
+          else
+            echo "::warning::未找到 mapping.txt。"
+          fi
+          SYMBOLS="$(find "$EAS_LOCAL_BUILD_WORKINGDIR" -name 'native-debug-symbols*.zip' -type f -print -quit 2>/dev/null || true)"
+          if [[ -n "$SYMBOLS" ]]; then
+            cp "$SYMBOLS" "$WORK/input-artifacts/native-debug-symbols.zip"
+          else
+            echo "::warning::未找到原生符号文件。"
+          fi
+
+      - name: 收集 iOS 产物
+        if: inputs.platform == 'ios'
+        run: |
+          set -euo pipefail
+          printf 'package\n' > "$WORK/stage.txt"
+          mkdir -p "$WORK/ios-output" "$WORK/input-artifacts"
+          ARCHIVE="$WORK/output/build.tar.gz"
+          if [[ ! -s "$ARCHIVE" ]]; then
+            echo "::error::EAS 未生成 iOS 构建归档。"
+            exit 1
+          fi
+          tar -xzf "$ARCHIVE" -C "$WORK/ios-output"
+          IPA="$(find "$WORK/ios-output" -name '*.ipa' -type f -print -quit)"
+          if [[ -z "$IPA" ]]; then
+            echo "::error::iOS 构建归档中未找到 IPA。"
+            exit 1
+          fi
+          cp "$IPA" "$WORK/input-artifacts/app.ipa"
+          DSYM="$(find "$WORK/ios-output" -name '*.dSYM.zip' -type f -print -quit)"
+          if [[ -n "$DSYM" ]]; then
+            cp "$DSYM" "$WORK/input-artifacts/app.dSYM.zip"
+          else
+            echo "::warning::未找到 dSYM 符号文件。"
+          fi
+
+      - name: 扫描构建日志
+        run: |
+          set -euo pipefail
+          FILES=("$WORK/eas-build.log")
+          if [[ -f "$WORK/signing/keytool.txt" ]]; then
+            FILES+=("$WORK/signing/keytool.txt")
+          fi
+          if [[ -f "$WORK/signing/openssl.txt" ]]; then
+            FILES+=("$WORK/signing/openssl.txt")
+          fi
+          node scripts/release/scan-logs.mjs "${FILES[@]}"
+
+      - name: 打包产物与商店资料
+        run: |
+          set -euo pipefail
+          printf 'package\n' > "$WORK/stage.txt"
+          ARGS=(
+            --platform "$PLATFORM"
+            --build-id "$BUILD_ID"
+            --channel "$CHANNEL"
+            --version "$VERSION"
+            --build-number "$BUILD_NUMBER"
+            --lock "$WORK/inputs/native-plugin-lock.json"
+            --signing-fingerprint "$ACTUAL_SIGNING_FINGERPRINT"
+            --source-revision "$(git rev-parse HEAD)"
+            --out "$WORK/package"
+          )
+          if [[ "$PLATFORM" == "android" ]]; then
+            ARGS+=(
+              --artifact "app.aab=$WORK/input-artifacts/app.aab"
+              --artifact "app-universal.apk=$WORK/input-artifacts/app-universal.apk"
+            )
+            if [[ -f "$WORK/input-artifacts/mapping.txt" ]]; then
+              ARGS+=(--artifact "mapping.txt=$WORK/input-artifacts/mapping.txt")
+            fi
+            if [[ -f "$WORK/input-artifacts/native-debug-symbols.zip" ]]; then
+              ARGS+=(--artifact "native-debug-symbols.zip=$WORK/input-artifacts/native-debug-symbols.zip")
+            fi
+          else
+            ARGS+=(--artifact "app.ipa=$WORK/input-artifacts/app.ipa")
+            if [[ -f "$WORK/input-artifacts/app.dSYM.zip" ]]; then
+              ARGS+=(--artifact "app.dSYM.zip=$WORK/input-artifacts/app.dSYM.zip")
+            fi
+          fi
+          if pnpm licenses list --json --prod > "$WORK/licenses.json" 2>/dev/null; then
+            node scripts/release/package-artifacts.mjs "${ARGS[@]}" --licenses "$WORK/licenses.json"
+          else
+            rm -f "$WORK/licenses.json"
+            echo "::warning::依赖许可清单生成失败，SBOM 不含许可证信息。"
+            node scripts/release/package-artifacts.mjs "${ARGS[@]}"
+          fi
+
+      - name: 上传 GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: native-${{ inputs.build_id }}
+          LOCK_HASH: ${{ steps.dispatch.outputs.lock_hash }}
+        run: |
+          set -euo pipefail
+          printf 'release\n' > "$WORK/stage.txt"
+          ASSETS=()
+          while IFS= read -r -d '' file; do
+            ASSETS+=("$file")
+          done < <(find "$WORK/package" -maxdepth 1 -type f -print0)
+          if [[ ${#ASSETS[@]} -eq 0 ]]; then
+            echo "::error::没有可上传的产物。"
+            exit 1
+          fi
+          gh release create "$TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "原生构建 $BUILD_ID（$CHANNEL / $PLATFORM）" \
+            --notes "版本 $VERSION（构建号 $BUILD_NUMBER）；锁哈希 $LOCK_HASH。" \
+            --prerelease \
+            "${ASSETS[@]}"
+          EXPECTED="${#ASSETS[@]}"
+          ACTUAL="$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets | length')"
+          if [[ "$EXPECTED" != "$ACTUAL" ]]; then
+            echo "::error::Release 资产数量不一致（期望 $EXPECTED，实际 $ACTUAL）。"
+            exit 1
+          fi
+          echo "已上传 Release：$TAG"
+
+      - name: 标记构建成功
+        run: echo "BUILD_SUCCEEDED=true" >> "$GITHUB_ENV"
+
+      - name: 发送成功回调
+        env:
+          NATIVE_RELEASE_CALLBACK_HMAC_SECRET: ${{ secrets.NATIVE_RELEASE_CALLBACK_HMAC_SECRET }}
+          CALLBACK_URL: ${{ inputs.callback_url }}
+          LOG_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          LOCK_HASH: ${{ steps.dispatch.outputs.lock_hash }}
+          BUILD_ID: ${{ inputs.build_id }}
+          PLATFORM: ${{ inputs.platform }}
+          CHANNEL: ${{ inputs.channel }}
+          VERSION: ${{ inputs.version }}
+          BUILD_NUMBER: ${{ inputs.build_number }}
+        run: |
+          set -euo pipefail
+          printf 'callback\n' > "$WORK/stage.txt"
+          node scripts/release/send-callback.mjs \
+            --url "$CALLBACK_URL" \
+            --secret-env NATIVE_RELEASE_CALLBACK_HMAC_SECRET \
+            --build-id "$BUILD_ID" \
+            --platform "$PLATFORM" \
+            --channel "$CHANNEL" \
+            --version "$VERSION" \
+            --build-number "$BUILD_NUMBER" \
+            --lock-hash "$LOCK_HASH" \
+            --status succeeded \
+            --nonce "$CALLBACK_NONCE" \
+            --package-dir "$WORK/package" \
+            --signing-fingerprint "$ACTUAL_SIGNING_FINGERPRINT" \
+            --log-url "$LOG_URL"
+
+      - name: 发送失败回调
+        if: failure() || cancelled()
+        env:
+          NATIVE_RELEASE_CALLBACK_HMAC_SECRET: ${{ secrets.NATIVE_RELEASE_CALLBACK_HMAC_SECRET }}
+          CALLBACK_URL: ${{ inputs.callback_url }}
+          LOG_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          LOCK_HASH: ${{ steps.dispatch.outputs.lock_hash }}
+          JOB_STATUS: ${{ job.status }}
+          BUILD_ID: ${{ inputs.build_id }}
+          PLATFORM: ${{ inputs.platform }}
+          CHANNEL: ${{ inputs.channel }}
+          VERSION: ${{ inputs.version }}
+          BUILD_NUMBER: ${{ inputs.build_number }}
+        run: |
+          set -euo pipefail
+          if [[ "${BUILD_SUCCEEDED:-}" == "true" ]]; then
+            echo "构建已成功，跳过失败回调。"
+            exit 0
+          fi
+          if [[ -z "$LOCK_HASH" ]]; then
+            echo "::warning::派发参数未通过校验，无法发送回调，依赖后台轮询。"
+            exit 0
+          fi
+          if [[ -z "${NATIVE_RELEASE_CALLBACK_HMAC_SECRET:-}" ]]; then
+            echo "::warning::缺少回调签名密钥，依赖后台轮询。"
+            exit 0
+          fi
+          STAGE="$(tr -d '\r\n' < "$WORK/stage.txt" 2>/dev/null || true)"
+          if [[ -z "$STAGE" ]]; then
+            STAGE=unknown
+          fi
+          STAGE_CODE="$(printf '%s' "$STAGE" | tr '[:lower:]-' '[:upper:]_')"
+          if [[ "$JOB_STATUS" == "cancelled" ]]; then
+            STATUS=cancelled
+            ERROR_CODE="STAGE_${STAGE_CODE}_CANCELLED"
+          else
+            STATUS=failed
+            ERROR_CODE="STAGE_${STAGE_CODE}_FAILED"
+          fi
+          NONCE="${CALLBACK_NONCE:-$(node -e 'console.log(require("node:crypto").randomBytes(24).toString("hex"))')}"
+          node scripts/release/send-callback.mjs \
+            --url "$CALLBACK_URL" \
+            --secret-env NATIVE_RELEASE_CALLBACK_HMAC_SECRET \
+            --build-id "$BUILD_ID" \
+            --platform "$PLATFORM" \
+            --channel "$CHANNEL" \
+            --version "$VERSION" \
+            --build-number "$BUILD_NUMBER" \
+            --lock-hash "$LOCK_HASH" \
+            --status "$STATUS" \
+            --nonce "$NONCE" \
+            --artifacts "$WORK/inputs/empty-artifacts.json" \
+            --log-url "$LOG_URL" \
+            --stage "$STAGE" \
+            --error-code "$ERROR_CODE"
+
+      - name: 清理敏感文件
+        if: always()
+        run: |
+          set -euo pipefail
+          rm -f credentials.json
+          if [[ -f "$WORK/eas.json.bak" ]]; then
+            cp "$WORK/eas.json.bak" eas.json
+          fi
+          rm -rf "$WORK/signing" "$WORK/native-project" "$WORK/ios-output"
+          if [[ -n "${EAS_LOCAL_BUILD_WORKINGDIR:-}" && "${EAS_LOCAL_BUILD_WORKINGDIR}" == "${RUNNER_TEMP}/"* ]]; then
+            rm -rf "$EAS_LOCAL_BUILD_WORKINGDIR"
+          fi
+          echo "已清理签名文件与临时构建目录。"

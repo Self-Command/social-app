@@ -125,6 +125,9 @@ src/lexicons/
 *.apk
 *.aab
 *.ipa
+.native-build/
+.native-signing/
+credentials.json
 
 # ogcard assets
 bskyogcard/src/assets/fonts/noto-*
@@ -141,3 +144,4 @@ docs/superpowers/
 
 # pnpm
 .pnpm-store/
+.plugin-build/

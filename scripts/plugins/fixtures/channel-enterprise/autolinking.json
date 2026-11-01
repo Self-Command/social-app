@@ -1,0 +1,6 @@
+{
+  "modules": [
+    {"packageName": "expo-modules-core", "packageImportPath": "import expo.modules.ExpoModulesCorePackage;"},
+    {"packageName": "app-updater", "packageImportPath": "import com.selfcommand.updater.AppUpdaterPackage;"}
+  ]
+}

@@ -184,6 +184,24 @@ test('accepts a valid plugin catalog', () => {
   assert.ok(result.fileCount >= 3)
 })
 
+test('accepts generated catalog modules in the registry', () => {
+  const project = makeProject()
+  project.addPlugin()
+  project.write(
+    'src/features/plugins/catalog/catalog.generated.ts',
+    `export const GENERATED_PLUGIN_CATALOG = [] as const\n`,
+  )
+  project.write(
+    'src/features/plugins/catalog/index.ts',
+    `import {plugin0} from './com.example.demo'\nimport {GENERATED_PLUGIN_CATALOG} from './catalog.generated'\n\nexport const pluginCatalog = [plugin0, ...GENERATED_PLUGIN_CATALOG] as const\n`,
+  )
+
+  const result = project.check()
+
+  assert.deepEqual(result.errors, [])
+  assert.equal(result.pluginCount, 1)
+})
+
 test('accepts the repository catalog', () => {
   const result = checkPlugins()
 

@@ -10,8 +10,27 @@ const pkg = require('./package.json')
 module.exports = function (_config) {
   /**
    * App version number. Should be incremented as part of a release cycle.
+   * Native release builds pass the approved version and build number instead
+   * of relying on EAS remote versioning, so the artifact matches the record
+   * the admin console approved.
    */
-  const VERSION = pkg.version
+  const RELEASE_VERSION = process.env.NATIVE_RELEASE_VERSION
+  const RELEASE_BUILD_NUMBER = process.env.NATIVE_RELEASE_BUILD_NUMBER
+  if (
+    RELEASE_VERSION !== undefined &&
+    !/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/.test(
+      RELEASE_VERSION,
+    )
+  ) {
+    throw new Error('NATIVE_RELEASE_VERSION 必须是语义化版本')
+  }
+  if (
+    RELEASE_BUILD_NUMBER !== undefined &&
+    !/^[1-9]\d{0,8}$/.test(RELEASE_BUILD_NUMBER)
+  ) {
+    throw new Error('NATIVE_RELEASE_BUILD_NUMBER 必须是正整数')
+  }
+  const VERSION = RELEASE_VERSION || pkg.version
 
   // 企业 Firebase 配置尚未建立：文件存在或通过 EAS 文件环境变量注入时才启用，
   // 否则 Android 构建会因缺少 google-services.json 直接失败。
@@ -77,6 +96,7 @@ module.exports = function (_config) {
       ios: {
         supportsTablet: true,
         bundleIdentifier: 'xyz.blueskyweb.app',
+        ...(RELEASE_BUILD_NUMBER ? {buildNumber: RELEASE_BUILD_NUMBER} : {}),
         appleTeamId: process.env.EXPO_APPLE_TEAM_ID,
         config: {
           usesNonExemptEncryption: false,
@@ -214,6 +234,9 @@ module.exports = function (_config) {
         },
         googleServicesFile: GOOGLE_SERVICES_FILE,
         package: 'xyz.blueskyweb.app',
+        ...(RELEASE_BUILD_NUMBER
+          ? {versionCode: Number(RELEASE_BUILD_NUMBER)}
+          : {}),
         intentFilters: [
           {
             action: 'VIEW',
@@ -257,6 +280,8 @@ module.exports = function (_config) {
         checkAutomatically: 'NEVER',
       },
       plugins: [
+        // 原生插件权限需覆盖 expo-camera 的 RECORD_AUDIO 移除指令；mod 逆序执行，故置于首位。
+        './plugins/with-native-plugins.js',
         [
           'expo-dev-client',
           {

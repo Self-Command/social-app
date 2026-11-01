@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "plugins": [
+    {
+      "id": "com.example.nativerecorder",
+      "version": "1.0.0",
+      "commit": "0123456789abcdef0123456789abcdef01234567",
+      "sourceDir": "./plugin"
+    }
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "name": "@community-plugins/nativerecorder",
+  "version": "1.0.0",
+  "private": true,
+  "main": "index.ts",
+  "types": "index.ts",
+  "scripts": {
+    "postinstall": "node scripts/postinstall.cjs"
+  }
+}

@@ -1129,6 +1129,14 @@ function isBinaryFile(file) {
   return sample.includes(0)
 }
 
+const CATALOG_MODULE_EXTENSIONS = ['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs']
+
+function isCatalogModule(catalogDir, specifier) {
+  return CATALOG_MODULE_EXTENSIONS.some(extension =>
+    fs.existsSync(path.join(catalogDir, `${specifier}${extension}`)),
+  )
+}
+
 function checkCatalogRegistration({
   catalogIndex,
   catalogDir,
@@ -1164,9 +1172,8 @@ function checkCatalogRegistration({
 
   const dirs = new Set(plugins.map(plugin => plugin.dirName))
   for (const dirName of imports.keys()) {
-    if (!dirs.has(dirName)) {
-      errors.push(`${rel(catalogIndex)}: 引用了不存在的插件目录 "${dirName}"`)
-    }
+    if (dirs.has(dirName) || isCatalogModule(catalogDir, dirName)) continue
+    errors.push(`${rel(catalogIndex)}: 引用了不存在的插件目录 "${dirName}"`)
   }
 
   const catalogBody = extractBracketBody(source, 'pluginCatalog')

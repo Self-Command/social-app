@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 2,
+  "id": "com.example.nativerecorder",
+  "name": "原声录音",
+  "description": "在发帖工具栏录制语音评论，并把录音附加到编辑器草稿。",
+  "version": "1.0.0",
+  "hostApi": 2,
+  "nativeApi": 1,
+  "platforms": ["ios", "android"],
+  "slots": [
+    { "id": "composer.toolbar", "order": 100 },
+    { "id": "feed.item.footer", "order": 200 }
+  ],
+  "capabilities": [
+    "feed.read",
+    "composer.insertText",
+    "storage.local",
+    "toast.show",
+    "native.host",
+    "native.permissions",
+    "native.ui"
+  ],
+  "native": {
+    "package": "@community-plugins/nativerecorder",
+    "modules": ["NativeRecorder"],
+    "views": [{ "name": "RecorderView", "heightMode": "content" }],
+    "permissions": [{ "name": "microphone", "reason": "用于录制语音评论" }],
+    "minAppVersion": "2.0.0",
+    "network": { "outbound": [] }
+  }
+}
